@@ -20,9 +20,18 @@ export function getAuthHeaders(): Record<string, string> {
 
 async function fetchWithFallback(endpoint: string, options: RequestInit): Promise<Response> {
   const isBrowser = typeof window !== 'undefined';
+  
+  // Prefer direct API connection first to bypass Next.js dev server proxy hiccups on Windows
   const urlsToTry = isBrowser
-    ? [`/api/v1${endpoint}`, `${DEFAULT_API_BASE}/api/v1${endpoint}`, `http://127.0.0.1:4000/api/v1${endpoint}`]
-    : [`${DEFAULT_API_BASE}/api/v1${endpoint}`, `http://127.0.0.1:4000/api/v1${endpoint}`];
+    ? [
+        `${DEFAULT_API_BASE}/api/v1${endpoint}`,
+        `http://127.0.0.1:4000/api/v1${endpoint}`,
+        `/api/v1${endpoint}`,
+      ]
+    : [
+        `${DEFAULT_API_BASE}/api/v1${endpoint}`,
+        `http://127.0.0.1:4000/api/v1${endpoint}`,
+      ];
 
   let lastRes: Response | null = null;
   let lastError: any;
@@ -30,8 +39,8 @@ async function fetchWithFallback(endpoint: string, options: RequestInit): Promis
   for (const url of urlsToTry) {
     try {
       const res = await fetch(url, options);
-      // If the Next.js relative rewrite isn't active yet and returns 404, fall through to direct backend
-      if (res.status === 404 && url.startsWith('/api/v1')) {
+      // If we got a 5xx from an intermediate proxy or 404 on relative proxy, try the other candidates
+      if ((res.status >= 500 || res.status === 404) && urlsToTry.length > 1) {
         lastRes = res;
         continue;
       }
@@ -42,7 +51,22 @@ async function fetchWithFallback(endpoint: string, options: RequestInit): Promis
   }
 
   if (lastRes) return lastRes;
-  throw lastError || new Error('Failed to connect to API server. Ensure the backend is running on port 4000.');
+  throw lastError || new Error('Failed to connect to API server. Ensure backend is running on port 4000.');
+}
+
+async function handleResponse<T>(res: Response): Promise<T> {
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    let message = '';
+    try {
+      const json = JSON.parse(text);
+      message = json.error?.message || json.message || (typeof json.error === 'string' ? json.error : '');
+    } catch {
+      message = text.slice(0, 300);
+    }
+    throw new Error(message || `HTTP ${res.status}`);
+  }
+  return res.json();
 }
 
 export const api = {
@@ -50,11 +74,7 @@ export const api = {
     const res = await fetchWithFallback(endpoint, {
       headers: getAuthHeaders(),
     });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error?.message || `HTTP ${res.status}`);
-    }
-    return res.json();
+    return handleResponse<T>(res);
   },
 
   async post<T = any>(endpoint: string, body?: any): Promise<T> {
@@ -63,11 +83,7 @@ export const api = {
       headers: getAuthHeaders(),
       body: body ? JSON.stringify(body) : undefined,
     });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error?.message || `HTTP ${res.status}`);
-    }
-    return res.json();
+    return handleResponse<T>(res);
   },
 
   async patch<T = any>(endpoint: string, body?: any): Promise<T> {
@@ -76,11 +92,7 @@ export const api = {
       headers: getAuthHeaders(),
       body: body ? JSON.stringify(body) : undefined,
     });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error?.message || `HTTP ${res.status}`);
-    }
-    return res.json();
+    return handleResponse<T>(res);
   },
 
   async delete<T = any>(endpoint: string): Promise<T> {
@@ -88,10 +100,6 @@ export const api = {
       method: 'DELETE',
       headers: getAuthHeaders(),
     });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error?.message || `HTTP ${res.status}`);
-    }
-    return res.json();
+    return handleResponse<T>(res);
   },
 };
