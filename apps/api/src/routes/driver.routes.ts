@@ -131,10 +131,39 @@ router.post(
   async (req: Request, res: Response) => {
     const { lat, lng, heading } = req.body;
 
-    const profile = await prisma.driverProfile.update({
+    let profile = await prisma.driverProfile.findUnique({
       where: { userId: req.user!.id },
-      data: { isOnline: true, currentLat: lat, currentLng: lng, heading },
     });
+
+    if (!profile) {
+      profile = await prisma.driverProfile.create({
+        data: {
+          userId: req.user!.id,
+          licenseNo: 'DL-DEMO-9988',
+          kycStatus: 'APPROVED',
+          isOnline: true,
+          currentLat: lat,
+          currentLng: lng,
+          heading,
+          vehicle: {
+            create: {
+              type: 'SEDAN',
+              make: 'Toyota',
+              model: 'Etios',
+              color: 'Silver',
+              plateNo: 'KA 01 AB 1234',
+              year: 2022,
+              seats: 4,
+            },
+          },
+        },
+      });
+    } else {
+      profile = await prisma.driverProfile.update({
+        where: { id: profile.id },
+        data: { isOnline: true, currentLat: lat, currentLng: lng, heading },
+      });
+    }
 
     await redis.geoAdd('drivers:online', lng, lat, profile.id);
 
@@ -144,12 +173,17 @@ router.post(
 
 // 4. Go Offline
 router.post('/driver/offline', authMiddleware, async (req: Request, res: Response) => {
-  const profile = await prisma.driverProfile.update({
+  const profile = await prisma.driverProfile.findUnique({
     where: { userId: req.user!.id },
-    data: { isOnline: false },
   });
 
-  await redis.geoRemove('drivers:online', profile.id);
+  if (profile) {
+    await prisma.driverProfile.update({
+      where: { id: profile.id },
+      data: { isOnline: false },
+    });
+    await redis.geoRemove('drivers:online', profile.id);
+  }
 
   res.json({ profile, isOnline: false });
 });

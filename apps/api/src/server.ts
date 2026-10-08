@@ -93,7 +93,7 @@ setupSocketIO(server);
 
 // Start Server only outside test runs
 if (process.env.NODE_ENV !== 'test') {
-  server.listen(Number(PORT), '0.0.0.0', () => {
+  server.listen(Number(PORT), () => {
     console.log(`🚀 Cab Booking API Server running on port ${PORT}`);
     console.log(`📍 Health check: http://localhost:${PORT}/healthz`);
     console.log(`📍 Database readyz: http://localhost:${PORT}/readyz`);
