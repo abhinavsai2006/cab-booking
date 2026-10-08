@@ -1,0 +1,28 @@
+{
+  "name": "cab-booking-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "seed": "tsx prisma/seed.ts",
+    "simulate": "tsx scripts/simulate.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.0",
+    "dotenv": "^16.4.7",
+    "prisma": "^6.3.1",
+    "@prisma/client": "^6.3.1",
+    "tsx": "^4.19.2",
+    "turbo": "^2.4.2",
+    "typescript": "^5.7.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
